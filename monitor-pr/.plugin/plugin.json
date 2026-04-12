@@ -1,0 +1,12 @@
+{
+  "name": "monitor-pr",
+  "version": "1.0.0",
+  "description": "Monitor a pull request until CI status and Copilot review are available — non-polling async terminal scripts that notify the agent when CI or reviews complete.",
+  "license": "MIT",
+  "keywords": ["pr", "pull-request", "ci", "code-review", "copilot", "monitor", "gh"]
+}
+{
+	"name": "monitor-pr",
+	"version": "1.0.0",
+	"description": ""
+}

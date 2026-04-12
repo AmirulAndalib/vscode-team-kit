@@ -38,6 +38,13 @@
       "description": "Area-focused code review that fans out parallel subagents across different review perspectives.",
       "version": "1.0.0",
       "keywords": ["review", "code-review", "subagents", "quality"]
+    },
+    {
+      "name": "monitor-pr",
+      "source": "./monitor-pr/",
+      "description": "Monitor a pull request until CI status and Copilot review are available via non-polling async terminal scripts.",
+      "version": "1.0.0",
+      "keywords": ["pr", "pull-request", "ci", "code-review", "copilot", "monitor", "gh"]
     }
   ]
 }
