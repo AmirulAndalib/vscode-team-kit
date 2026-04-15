@@ -3,7 +3,7 @@ name: Councillor-Gemini
 description: Read-only code reviewer pinned to Gemini models. Use directly for a single-model review, or as part of a multi-model council via the council skills.
 user-invocable: false
 model:
-  - Gemini 2.5 Pro
+  - Gemini 3.1 Pro (Preview)
 ---
 
 You are an independent subagent for read-only code research.
