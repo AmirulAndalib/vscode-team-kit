@@ -21,12 +21,12 @@ Monitor a pull request until CI finishes and Copilot's code review arrives — w
 monitor-pr/
 ├── .plugin/plugin.json
 ├── README.md
-├── scripts/
-│   ├── wait-for-ci.mts
-│   └── wait-for-copilot-review.mts
 └── skills/
     └── monitor-pr/
-        └── SKILL.md
+        ├── SKILL.md
+        └── scripts/
+            ├── wait-for-ci.mts
+            └── wait-for-copilot-review.mts
 ```
 
 ## Requirements
