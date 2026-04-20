@@ -34,18 +34,18 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 
 Run BOTH of these scripts in separate **async** terminals (`mode=async` on `run_in_terminal`, or your host's equivalent). Use a small timeout, such as `timeout=1000`, so the tool returns quickly after the monitor process starts. Do NOT await them and do NOT poll or sleep; the runtime will notify you on a later turn when each script exits.
 
-The scripts live next to this skill, at `<plugin-dir>/scripts/wait-for-ci.mts` and `<plugin-dir>/scripts/wait-for-copilot-review.mts`. **Always invoke them by absolute path** — derive the plugin directory from the absolute path of this SKILL.md (two directories up from `skills/monitor-pr/SKILL.md`), not from the current working directory. The agent's CWD is usually the user's project repo, not this plugin.
+The scripts live inside this skill directory, at `<skill-dir>/scripts/wait-for-ci.mts` and `<skill-dir>/scripts/wait-for-copilot-review.mts`. **Always invoke them by absolute path** — derive the skill directory from the absolute path of this SKILL.md, not from the current working directory. The agent's CWD is usually the user's project repo, not this plugin.
 
 **Terminal A — wait for Copilot code review:**
 
 ```sh
-node <plugin-dir>/scripts/wait-for-copilot-review.mts <pr-number> <owner/repo>
+node <skill-dir>/scripts/wait-for-copilot-review.mts <pr-number> <owner/repo>
 ```
 
 **Terminal B — wait for CI:**
 
 ```sh
-node <plugin-dir>/scripts/wait-for-ci.mts <pr-number> <owner/repo>
+node <skill-dir>/scripts/wait-for-ci.mts <pr-number> <owner/repo>
 ```
 
 After launching both, record their terminal IDs and stop. Return control to the user with a brief status message, for example: "Monitoring PR #N — waiting for CI and Copilot review."
