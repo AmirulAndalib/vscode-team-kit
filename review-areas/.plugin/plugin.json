@@ -1,7 +1,14 @@
 {
   "name": "review-areas",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Area-focused code review that fans out to parallel subagents — each examining a different review area (correctness, tests, security, performance, product).",
   "license": "MIT",
+  "categories": ["review"],
+  "status": "stable",
+  "maintainers": ["digitarald"],
+  "evals": {
+    "skills": ["review-areas"],
+    "trigger_tests": true
+  },
   "keywords": ["review", "code-review", "subagents", "quality"]
 }

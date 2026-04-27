@@ -3,5 +3,8 @@
   "version": "1.0.0",
   "description": "Analyze VS Code rolling build health on Azure DevOps — download recent builds, identify failures, show break/fix transitions with error details and commit links.",
   "license": "MIT",
+  "categories": ["ci"],
+  "status": "stable",
+  "maintainers": ["alexdima"],
   "keywords": ["build", "ci", "pipeline", "azure-devops", "build-champ", "rolling-build"]
 }

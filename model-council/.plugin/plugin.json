@@ -1,7 +1,14 @@
 {
   "name": "model-council",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Multi-model council for code review and planning — model-pinned agents independently review or plan, then findings are synthesized by consensus.",
   "license": "MIT",
+  "categories": ["review"],
+  "status": "stable",
+  "maintainers": ["digitarald"],
+  "evals": {
+    "skills": ["council-review", "council-plan"],
+    "trigger_tests": true
+  },
   "keywords": ["review", "code-review", "planning", "agents", "multi-model", "quality"]
 }
