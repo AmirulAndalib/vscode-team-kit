@@ -3,5 +3,8 @@
   "version": "1.0.0",
   "description": "Review implementation plans before handing off to coding — fans out parallel subagents across completeness, feasibility, sequencing, scope, and risk.",
   "license": "MIT",
+  "categories": ["review"],
+  "status": "stable",
+  "maintainers": ["digitarald"],
   "keywords": ["review", "plan", "subagents", "quality"]
 }

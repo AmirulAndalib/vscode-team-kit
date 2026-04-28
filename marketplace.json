@@ -3,40 +3,98 @@
   "owner": {
     "name": "Microsoft"
   },
+  "categories": [
+    {
+      "id": "review",
+      "label": "Code Review",
+      "description": "Automated code review with parallel subagents and multi-model consensus."
+    },
+    {
+      "id": "ci",
+      "label": "CI & Monitoring",
+      "description": "Monitor pull requests, CI pipelines, and build health."
+    },
+    {
+      "id": "workflow",
+      "label": "Workflow & Triage",
+      "description": "Slash commands, notification triage, and daily development flows."
+    },
+    {
+      "id": "code-quality",
+      "label": "Code Quality",
+      "description": "Enforce coding standards and ban patterns via hooks."
+    },
+    {
+      "id": "testing",
+      "label": "Testing",
+      "description": "Visual testing and fixture-based component exploration."
+    }
+  ],
   "plugins": [
     {
       "name": "handy-commands",
       "source": "./handy-commands/",
       "description": "Helpful slash commands for common development workflows.",
       "version": "1.0.0",
+      "categories": ["workflow"],
+      "status": "stable",
+      "maintainers": ["connor4312"],
       "keywords": ["commands", "workflow", "pr", "git"]
     },
     {
       "name": "ban-ast",
       "source": "./ban-ast/",
       "description": "Ban code patterns using Tree Sitter AST queries with justification overrides.",
-      "version": "1.0.0",
+      "version": "1.1.0",
+      "categories": ["code-quality"],
+      "status": "stable",
+      "maintainers": ["connor4312", "digitarald"],
+      "evals": {
+        "skills": ["manage-bans"],
+        "trigger_tests": true
+      },
       "keywords": ["ast", "tree-sitter", "linting", "ban", "hooks"]
     },
     {
       "name": "component-explorer",
       "source": "./component-explorer/",
       "description": "Skills for setting up and using the VS Code Component Explorer — fixture-based visual testing with MCP-powered screenshot comparison.",
-      "version": "1.0.0",
+      "version": "1.2.0",
+      "categories": ["testing"],
+      "status": "stable",
+      "maintainers": ["hediet", "digitarald"],
+      "evals": {
+        "skills": ["setup-component-explorer", "setup-component-explorer-full", "setup-component-explorer-light", "use-component-explorer"],
+        "trigger_tests": true
+      },
       "keywords": ["component-explorer", "fixtures", "screenshots", "visual-testing", "mcp"]
     },
     {
       "name": "model-council",
       "source": "./model-council/",
       "description": "Multi-model council for code review and planning — model-pinned agents independently review or plan, then findings are synthesized by consensus.",
-      "version": "1.1.0",
+      "version": "1.2.0",
+      "categories": ["review"],
+      "status": "stable",
+      "maintainers": ["digitarald"],
+      "evals": {
+        "skills": ["council-review", "council-plan"],
+        "trigger_tests": true
+      },
       "keywords": ["review", "code-review", "planning", "agents", "multi-model", "quality"]
     },
     {
       "name": "review-areas",
       "source": "./review-areas/",
       "description": "Area-focused code review that fans out parallel subagents across different review perspectives.",
-      "version": "1.0.0",
+      "version": "1.2.0",
+      "categories": ["review"],
+      "status": "stable",
+      "maintainers": ["digitarald"],
+      "evals": {
+        "skills": ["review-areas"],
+        "trigger_tests": true
+      },
       "keywords": ["review", "code-review", "subagents", "quality"]
     },
     {
@@ -44,20 +102,29 @@
       "source": "./review-plan/",
       "description": "Review implementation plans before coding — fans out subagents across completeness, feasibility, sequencing, scope, and risk.",
       "version": "1.0.0",
+      "categories": ["review"],
+      "status": "stable",
+      "maintainers": ["digitarald"],
       "keywords": ["review", "plan", "subagents", "quality"]
     },
     {
       "name": "monitor-pr",
       "source": "./monitor-pr/",
       "description": "Monitor a pull request until CI status and Copilot review are available via non-polling async terminal scripts.",
-      "version": "1.0.0",
+      "version": "1.1.0",
+      "categories": ["ci"],
+      "status": "stable",
+      "maintainers": ["roblourens"],
       "keywords": ["pr", "pull-request", "ci", "code-review", "copilot", "monitor", "gh"]
     },
     {
       "name": "github-inbox",
       "source": "./github-inbox/",
       "description": "Triage and act on your GitHub notifications — smart grouping, rules, memory, and sub-agents for review, triage, and investigation.",
-      "version": "1.0.0",
+      "version": "1.2.0",
+      "categories": ["workflow"],
+      "status": "stable",
+      "maintainers": ["sandy081"],
       "keywords": ["github", "notifications", "inbox", "triage", "agents"]
     },
     {
@@ -65,6 +132,9 @@
       "source": "./build-health/",
       "description": "Analyze VS Code rolling build health on Azure DevOps — download recent builds, identify failures, show break/fix transitions with error details and commit links.",
       "version": "1.0.0",
+      "categories": ["ci"],
+      "status": "stable",
+      "maintainers": ["alexdima"],
       "keywords": ["build", "ci", "pipeline", "azure-devops", "build-champ", "rolling-build"]
     }
   ]
