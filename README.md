@@ -60,11 +60,12 @@ Install any plugin directly in VS Code:
 |---|---|
 | [research](research/) | Decomposes a research query into parallel subagents, iteratively searches web and code sources, then synthesizes a citation-rich report with confidence levels |
 
-### Debug — drive debuggers from agent mode
+### Debug — inspect runtime behavior with the right tool
 
 | Plugin | What it does |
 |---|---|
-| [dap-cli](https://github.com/roblourens/dap-cli) ↗ | Drives any DAP debugger (Node.js, Python, Chrome) from the CLI — breakpoints, stepping, variable inspection, launch.json support |
+| [dap-cli](https://github.com/roblourens/dap-cli) ↗ | DAP debugger controls — breakpoints, stepping, stack and variable inspection, and launch configuration |
+| [debug](debug/) | Hypothesis-driven temporary instrumentation and local structured runtime evidence, with mandatory human reproduction and cleanup gates |
 
 ## How we use these
 
