@@ -32,7 +32,7 @@
     {
       "id": "debugging",
       "label": "Debugging",
-      "description": "Debug Adapter Protocol tooling for driving debug sessions from the CLI."
+      "description": "Debugger controls and evidence-driven runtime instrumentation workflows."
     }
   ],
   "plugins": [
@@ -170,6 +170,15 @@
       "status": "stable",
       "maintainers": ["digitarald"],
       "keywords": ["research", "deep-research", "web-search", "agents", "reports", "citations"]
+    },
+    {
+      "name": "debug",
+      "source": "./debug/",
+      "description": "Evidence-driven debugging with competing hypotheses, temporary probes, and local structured runtime logs.",
+      "version": "1.0.0",
+      "categories": ["debugging"],
+      "status": "experimental",
+      "keywords": ["debugging", "instrumentation", "structured-logging", "hypotheses", "runtime-evidence", "human-in-the-loop"]
     },
     {
       "name": "dap-cli",
