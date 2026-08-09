@@ -1,7 +1,12 @@
 import { spawn } from 'node:child_process';
 import { setTimeout } from 'node:timers/promises';
+import { pathToFileURL } from 'node:url';
 
 const pollIntervalMs = 30_000;
+const nonBlockingPolicyCheckNames = new Set([
+	'Community PR Approvals',
+	'VS Code PR Check',
+]);
 
 interface GhResult {
 	exitCode: number;
@@ -9,11 +14,16 @@ interface GhResult {
 	stderr: string;
 }
 
-interface CheckRun {
+export interface CheckRun {
 	name: string;
 	bucket: string;
 	link: string;
 }
+
+export type CiOutcome =
+	| { state: 'failed'; failedChecks: CheckRun[] }
+	| { state: 'passed' }
+	| { state: 'pending' };
 
 function usage(): never {
 	console.error('Usage: node wait-for-ci.mts <pr-number> <owner/repo>');
@@ -74,6 +84,18 @@ function printChecks(checks: CheckRun[]): void {
 	}
 }
 
+export function evaluateChecks(checks: readonly CheckRun[]): CiOutcome {
+	const blockingChecks = checks.filter(check => !nonBlockingPolicyCheckNames.has(check.name));
+	const failedChecks = blockingChecks.filter(check => check.bucket === 'fail' || check.bucket === 'cancel');
+	if (failedChecks.length > 0) {
+		return { state: 'failed', failedChecks };
+	}
+
+	const allDone = blockingChecks.length > 0
+		&& blockingChecks.every(check => check.bucket === 'pass' || check.bucket === 'skipping');
+	return { state: allDone ? 'passed' : 'pending' };
+}
+
 async function main(): Promise<void> {
 	const [prNumber, repo] = process.argv.slice(2);
 	if (!prNumber || !repo) {
@@ -112,20 +134,24 @@ async function main(): Promise<void> {
 
 		printChecks(checks);
 
-		const failedChecks = checks.filter(check => check.bucket === 'fail' || check.bucket === 'cancel');
-		if (failedChecks.length > 0) {
+		const ignoredChecks = checks.filter(check => nonBlockingPolicyCheckNames.has(check.name));
+		if (ignoredChecks.length > 0) {
+			console.log(`Ignoring non-build policy checks: ${ignoredChecks.map(check => check.name).join(', ')}`);
+		}
+
+		const outcome = evaluateChecks(checks);
+		if (outcome.state === 'failed') {
 			console.log('');
 			console.log('RESULT: CI_FAILED');
 			console.log('FAILED_CHECKS:');
-			for (const check of failedChecks) {
+			for (const check of outcome.failedChecks) {
 				const suffix = check.link ? `  ${check.link}` : '';
 				console.log(`- ${check.name}${suffix}`);
 			}
 			process.exit(1);
 		}
 
-		const allDone = checks.length > 0 && checks.every(check => check.bucket === 'pass' || check.bucket === 'skipping');
-		if (allDone) {
+		if (outcome.state === 'passed') {
 			console.log('');
 			console.log('RESULT: CI_PASSED');
 			console.log('All CI checks have passed.');
@@ -137,4 +163,6 @@ async function main(): Promise<void> {
 	}
 }
 
-await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+	await main();
+}
