@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.0 (2026-08-09)
+
+- Allow fixes made while monitoring a PR to be pushed without waiting for explicit user approval
+
 ## 1.2.0 (2026-05-11)
 
 - Handle each Copilot review comment immediately using agent judgment; resolve threads even when no code change is made (#19)

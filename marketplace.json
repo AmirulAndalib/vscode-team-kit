@@ -125,7 +125,7 @@
       "name": "monitor-pr",
       "source": "./monitor-pr/",
       "description": "Monitor a pull request until CI status and Copilot review are available — non-polling async terminal scripts that notify the agent when CI or reviews complete.",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "categories": ["ci"],
       "status": "stable",
       "maintainers": ["roblourens"],
