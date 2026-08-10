@@ -113,5 +113,6 @@ New commits re-trigger CI and may invalidate the existing Copilot review. After 
 ## Notes
 
 - Both scripts poll every 30 seconds to avoid hitting API rate limits, so there is up to ~30s of latency between an event occurring on GitHub and the script reporting it. Each poll also prints a progress line to stdout so the agent can confirm the monitor is still alive when reading the terminal output.
+- `wait-for-ci.mts` ignores the non-build `VS Code PR Check` and `Community PR Approvals` policy checks. Draft PRs can therefore report `CI_PASSED` once their actual build checks finish, without waiting for review approval.
 - `wait-for-ci.mts` exits **immediately** on the first poll that contains any failed or cancelled check; it does not wait for other checks to finish. All currently-failed checks at that moment are listed in the output.
 - `wait-for-copilot-review.mts` retries the pending-reviewer check once after a short grace window on startup to tolerate GitHub not yet having registered a freshly-requested Copilot reviewer.
