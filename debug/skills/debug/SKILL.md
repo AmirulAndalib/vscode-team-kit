@@ -1,7 +1,7 @@
 ---
 name: debug
 description: "Debug runtime-dependent bugs by generating competing hypotheses, adding temporary structured-log probes, collecting local evidence, and applying only an evidence-backed fix. Use for intermittent or timing-sensitive bugs, races, frontend/backend interaction failures, runtime-state issues, repeated speculative-fix failures, or explicit requests to instrument and collect evidence. Not for breakpoints, stepping, or variable inspection."
-compatibility: "Requires Node.js with native .mts type stripping, persistent SQL tooling, retained background processes, resumable human turns, and IPv4 connectivity from each instrumented process to the collector."
+compatibility: "Requires a structured question tool, Node.js with native .mts type stripping, persistent SQL tooling, retained background processes, resumable human turns, and IPv4 connectivity from each instrumented process to the collector."
 ---
 
 # Debug
@@ -23,7 +23,22 @@ Use for runtime-state, intermittent, timing-sensitive, race, cross-process, or r
 7. One orchestrator owns SQL writes, source edits, stage transitions, user gates, and cleanup. Advisors are read-only.
 8. Remote ingestion requires explicit approval and a trusted development network. Administration always remains loopback-only.
 9. Do not remove probes before human verification. A session is incomplete until owned probes/configuration are removed and collector shutdown is acknowledged.
-10. Never store collector tokens or sensitive event payloads in SQL.
+10. Never store sensitive event payloads in SQL, and never leave probe code or debug-only configuration behind.
+
+## Security Stance
+
+This skill runs on the developer's own machine, against their own code and data, at their request. Calibrate caution to that: the risks worth spending effort on are leaving instrumentation behind, capturing data that outlives the session, and extending trust beyond the local host.
+
+What genuinely matters:
+
+1. **Probe code must not survive the session.** Debug code that reaches a commit, a build artifact, or a colleague's checkout is the most likely real harm. Marker ownership and Stage 7 cleanup exist for this.
+2. **Probe payloads must stay bounded.** Events persist to disk in the collector and summaries persist in the ledger, so a probe that captures secrets, credentials, tokens, or personal data creates a durable copy that outlives the investigation. Invariant 4 governs this.
+3. **Leaving loopback is a real trust boundary.** Remote ingestion is unauthenticated-in-transit HTTP on a shared network, so it requires approval and a trusted network. Administration stays loopback-only.
+4. **Instrumentation must not change program behavior.** Probe failure stays outside control flow.
+
+What does not warrant ceremony: the collector's ingest token is an ephemeral per-session value that only prevents other local processes from posting junk into this collector. It grants no access to the developer's accounts, repository, or machine, and it dies with the collector. Treat it as a nuisance-prevention value rather than a credential. Avoid printing it gratuitously and keep it out of anything durable, but do not build elaborate handling around it. The admin token is held to a higher bar only because it can read collected events and stop the collector.
+
+Apply the same proportionality elsewhere: prefer the simplest delivery and cleanup that satisfies the four points above.
 
 ## Runtime Contract
 
@@ -72,7 +87,7 @@ ORDER BY updated_at DESC;
 ```
 
 - If one row belongs to the current workspace/problem, adopt it. Do not generate a new ID. If it has a collector config, run authenticated status before continuing.
-- If multiple rows could match, ask which investigation to resume.
+- If multiple rows could match, ask via the question tool which investigation to resume, with one choice per candidate `session_id` plus `Start a new investigation`.
 - Otherwise create one `debug_sessions` row with status `describing`.
 
 Retain the ledger as investigation history unless host session retention removes it. It is not an application artifact and must never appear in the application diff.
@@ -91,7 +106,7 @@ The schema enforces legal transitions, hypothesis breadth, evidence-bearing clos
 
 ## Interaction Policy
 
-Use a structured question tool when available; otherwise ask one focused question and stop. Do not ask merely to restate supplied information.
+Every human gate is one structured question-tool call carrying a single focused question, followed by a full stop. Use choices when the answer set is known; otherwise accept a free-form response rather than guessing exhaustive choices. If the tool requires choices, include the best-known choices and an explicit free-form option. Never continue past a gate before the answer arrives, and do not ask merely to restate supplied information. If no structured question tool is available, report the incompatibility and stop.
 
 Human input is required only for:
 
@@ -120,7 +135,7 @@ Advisors never edit, write SQL, operate the collector, ask user questions, decla
 
 ## Stage 1: Describe
 
-Capture symptom, expected/actual behavior, reproduction, affected subsystem, and timing characteristics. If concrete, record the framing and assumptions without confirmation. Ask only when a missing detail materially changes scope, privacy, risk, or reproduction.
+Capture symptom, expected/actual behavior, reproduction, affected subsystem, and timing characteristics. If concrete, record the framing and assumptions without confirmation. Ask via the question tool only when a missing detail materially changes scope, privacy, risk, or reproduction; offer choices only when the plausible answer set is known.
 
 Set the session to `hypothesizing`, then inspect relevant code. Parallelize only genuinely disjoint read-only exploration.
 
@@ -146,7 +161,15 @@ Plan shared discriminating probes where possible. For each physical marker use a
 
 Authorize after the schema breadth trigger passes. Probe coverage is checked in Stage 3 after the authorized round's `debug_probe_rounds` rows exist.
 
-A plan is low-risk same-host only when all probes use loopback, bounded permitted values, no dependency/new file/persistent configuration/behavior change, failure outside control flow, and no sensitive or materially timing-changing boundary. Record automatic authorization. Otherwise obtain explicit approval; for remote mode state the intended target and that ingestion is unencrypted trusted-network HTTP.
+A plan is low-risk same-host only when all probes use loopback, tier 1 or tier 2 configuration delivery, bounded permitted values, no dependency/new file/persistent configuration/behavior change, failure outside control flow, and no sensitive or materially timing-changing boundary. Record automatic authorization. Otherwise obtain explicit approval by asking via the question tool with these choices:
+
+```text
+Approve the probe plan
+Adjust the probe plan
+Abort and clean up
+```
+
+For remote mode state in the question the intended target and that ingestion is unencrypted trusted-network HTTP.
 
 ## Stage 3: Start and Instrument
 
@@ -163,9 +186,23 @@ node <plugin>/scripts/log-server.mts --allow-remote \
   --advertise-host <target-reachable-host>
 ```
 
-Require `RESULT: DEBUG_SERVER_READY`, then verify `RESULT: DEBUG_SERVER_RUNNING` using the status script. Select an unambiguous topology-matching ingest URL automatically; ask only when multiple plausible non-loopback candidates remain. `0.0.0.0` is never an ingest URL.
+Require `RESULT: DEBUG_SERVER_READY`, then verify `RESULT: DEBUG_SERVER_RUNNING` using the status script. Select an unambiguous topology-matching ingest URL automatically; only when multiple plausible non-loopback candidates remain, ask via the question tool with one choice per candidate URL. `0.0.0.0` is never an ingest URL.
 
-The config contains separate ingest/admin tokens. Never open it with a file-view tool or print tokens. Give probes only the selected ingest URL, collector session ID, and ingest token. Read the token directly into the child environment in one non-echoing launch command. On POSIX:
+The config contains separate ingest/admin tokens. Give probes only the selected ingest URL, collector session ID, and ingest token; never give a probe the admin token, and do not print either token when avoidable.
+
+Choose the lowest tier the target supports:
+
+| Tier | Delivery | Use when |
+|---|---|---|
+| 1 | Environment variables set by the launch command | The target reads `process.env` and you launch it |
+| 2 | Literals inside the owned marker block | The target cannot read the environment (sandboxed renderer, worker, browser page) |
+| 3 | Runtime injection of configuration into an already-running process | The target already loaded the owned probe block through hot reload or an equivalent mechanism and cannot be relaunched |
+
+Record the chosen tier per probe in `debug_decisions` before reproduction; Stage 7 reads those rows to determine its obligations. Never write a token value into a ledger row.
+
+### Tier 1: environment
+
+Read the token into the child environment as part of the launch command. On POSIX:
 
 ```sh
 DEBUG_URL=<ingest-url> DEBUG_SESSION_ID=<collector-id> \
@@ -174,7 +211,21 @@ DEBUG_INGEST_TOKEN="$(node -e \
   <config-path>)" <application-command>
 ```
 
-On Windows, set the variables in the debug launch script by reading the protected JSON through Node or PowerShell without writing or echoing the token.
+On Windows, set the variables in the debug launch script by reading the JSON through Node or PowerShell.
+
+### Tier 2: inline literals
+
+Write the ingest URL, collector session ID, and token as literals inside the owned marker block. Permitted when:
+
+- the ingest URL is loopback;
+- the values appear only inside that block, so ordinary cleanup removes them;
+- the file is not published, deployed, or committed automatically by a watcher or hook.
+
+Never stage or commit a block containing the token. Because the values live inside the marker block, Stage 7's existing marker search already covers them; no separate token hunt is required.
+
+### Tier 3: runtime injection
+
+Injecting into a process this investigation did not launch requires the Stage 2 approval gate, because the target's state is not fully known. Inject configuration only, never probe logic: the probe body stays in source inside its marker block so ordinary ownership and cleanup still apply, which means the target must already be running that block. Record the injection channel, the target process identity, and the exact injected identifier in `debug_decisions`, and clear it in Stage 7 with a `debug_cleanup` action.
 
 Record active collector identity in `debug_sessions`. Before reproduction:
 
@@ -223,7 +274,7 @@ Canonical event:
 
 Send with `Authorization: Bearer <DEBUG_INGEST_TOKEN>` and JSON content type. Bound every request to approximately 250 ms (`AbortSignal.timeout(250)` for Node fetch; `timeout=0.25` for Python) and keep rejection/failure handling outside application control flow. Do not use synchronous probes in timing-sensitive critical sections.
 
-Direct browser probes are unsupported: never bundle the ingest token into frontend code. Use backend instrumentation or a reviewed local relay.
+Frontend probes are permitted through tier 2 or tier 3 against a loopback collector, which handles browser preflights only for event ingestion. Never point a frontend probe at a non-loopback collector, and never leave the ingest token in code that ships, deploys, or is committed.
 
 For non-local targets, require a target-originated `lifecycle` event labeled `debug-connectivity-check`, observe it locally, and record a `preflight` validation before reproduction. Store the event once in `debug_evidence`, but exclude it from hypothesis classification and snapshot `event_count`.
 
@@ -231,7 +282,7 @@ If startup fails after creating a session directory, the script must remove only
 
 ## Stage 4: Reproduce
 
-Set session and round to `awaiting_reproduction`, then stop and ask:
+Set session and round to `awaiting_reproduction`, then ask via the question tool with these choices and stop:
 
 ```text
 Reproduced
@@ -240,6 +291,8 @@ Abort and clean up
 ```
 
 Include only required launch/restart instructions. Reuse a preflight-launched target unless restart is part of reproduction. Record the response in `debug_validations`.
+
+A `Could not reproduce — adjust` response stays in the same round. If the needed correction is still unclear, ask one focused free-form question through the question tool and stop; do not record another reproduction result until the user attempts reproduction again.
 
 A failed/invalid reproduction, collection failure, observer effect, or reproduction-step correction stays in the same round. Any probe-plan change returns that round to `authorized` before editing instrumentation; reapprove only material or newly high-risk changes. Material means a new subsystem/file/data category, meaningful volume/timing increase, topology/exposure/dependency/configuration/security change.
 
@@ -287,7 +340,7 @@ Close as `evidence_sufficient` before fixing, or as `inconclusive` only with a s
 
 Start a new round only when the prior round closed `inconclusive` and the next plan changes theories or discrimination. Preserve prior rows and use `supersedes_round` for revised theories. One retry round may proceed automatically through normal risk classification.
 
-After two closed inconclusive rounds, set the session to `awaiting_direction` and ask:
+After two closed inconclusive rounds, set the session to `awaiting_direction` and ask via the question tool with these choices:
 
 ```text
 Broaden to another subsystem
@@ -304,7 +357,7 @@ Set status `fixing`. Record the proposed smallest fix with supporting snapshot a
 
 ## Stage 7: Verify and Clean Up
 
-Set status `awaiting_verification`, then stop and ask:
+Set status `awaiting_verification`, then ask via the question tool with these choices and stop:
 
 ```text
 Resolved
@@ -315,18 +368,21 @@ Abort and clean up
 
 Automated tests, silence, plan approval, and advisor agreement never satisfy verification. If the issue persists, return to analysis/fixing or Stage 2 when theories/probes must change.
 
-After resolution or abort, clean up serially:
+After resolution or abort, clean up in this order while continuing independent actions whose ownership remains unambiguous:
 
 1. Set status `cleaning_up`; select every physical `debug_probes` row for this investigation.
 2. Verify exactly one ordered start/end pair at each recorded path and marker.
-3. On missing, duplicate, reordered, or drifted ownership, emit `CLEANUP_FAILED`, ask whether to leave untouched or wait for manual resolution, and stop.
+3. On missing, duplicate, reordered, or drifted ownership, emit `CLEANUP_FAILED`, leave that probe `active`, and do not edit its block.
 4. Remove each validated block once; set its probe status to `removed`.
-5. Remove a file only when `file_created = 1`, every probe for it belongs to this investigation, and the complete file is session-owned.
-6. Search recorded files for every distinct `debug:<marker_session_id>:` prefix. Any match is `CLEANUP_FAILED`.
-7. Remove debug-only configuration.
-8. Stop the active collector with the shutdown script and require `DEBUG_SERVER_STOPPED`.
-9. Delete only the resolved directory containing the recorded collector config. A `debug-<id>` name is supporting evidence, not a requirement for explicit `--session-directory` paths.
-10. Inspect the final application diff for residue and unrelated changes.
+5. Remove a file only when `file_created = 1`, every probe for it belongs to this investigation, every block verified and was removed, and the complete file is session-owned.
+6. Search all recorded files for every distinct `debug:<marker_session_id>:` prefix, even when an earlier action failed. Any match is `CLEANUP_FAILED`. This also covers inlined tier 2 values, which live inside those blocks.
+7. If any tier 3 injection was recorded, clear each injected identifier from the target process, or note that a restart will clear it.
+8. Remove debug-only configuration.
+9. Stop the active collector with the shutdown script and require `DEBUG_SERVER_STOPPED`.
+10. After acknowledged collector shutdown, delete only the resolved directory containing the recorded collector config. A `debug-<id>` name is supporting evidence, not a requirement for explicit `--session-directory` paths.
+11. Inspect the final application diff for residue and unrelated changes.
+
+Record every cleanup failure and continue with independent verified actions; never mutate an artifact whose ownership is ambiguous. After all safe actions have been attempted, keep the session incomplete, set it to `failed`, and make one question-tool call that identifies each unresolved absolute path and marker, with the choices `Leave the remaining artifacts untouched` and `Wait for manual resolution`.
 
 Record each action in `debug_cleanup`. Set `resolved` only after successful human verification and complete cleanup; otherwise use `aborted` or `failed`.
 

@@ -175,7 +175,7 @@
       "name": "debug",
       "source": "./debug/",
       "description": "Evidence-driven debugging with competing hypotheses, temporary probes, and local structured runtime logs.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "categories": ["debugging"],
       "status": "experimental",
       "keywords": ["debugging", "instrumentation", "structured-logging", "hypotheses", "runtime-evidence", "human-in-the-loop"]

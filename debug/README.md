@@ -137,7 +137,7 @@ A new round begins only after a valid, complete reproduction leaves the theories
 
 Read-only work can fan out across disjoint subsystem exploration, independent hypothesis generation, hypothesis-specific analysis of a materialized SQL event snapshot, and complementary-model rubber-duck critiques of probe plans or proposed fixes. One orchestrator retains all SQL writes, source edits, probe ownership, synthesis decisions, human gates, and cleanup.
 
-When the initial request is concrete, the skill records its problem framing and proceeds without asking the user to confirm a restatement. It asks only for missing details that materially change the investigation. Low-risk same-host probes are automatically authorized and recorded; remote exposure and high-risk probes still require approval. Structured questions remain mandatory for reproduction, final verification, retry escalation after two inconclusive rounds, abort choices, and ambiguous cleanup. Plan-mode approval authorizes instrumentation but does not replace reproduction or verification.
+When the initial request is concrete, the skill records its problem framing and proceeds without asking the user to confirm a restatement. It asks only for missing details that materially change the investigation. Low-risk same-host probes are automatically authorized and recorded; remote exposure and high-risk probes still require approval. Structured questions remain mandatory for reproduction, final verification, retry escalation after two inconclusive rounds, abort choices, and ambiguous cleanup. They use choices for known decision sets and accept free-form detail when the answer cannot be predicted. Plan-mode approval authorizes instrumentation but does not replace reproduction or verification.
 
 ## `debug` versus `dap-cli`
 
@@ -154,6 +154,7 @@ When the initial request is concrete, the skill records its problem framing and 
 - Node.js with native type stripping for `.mts` files.
 - SQL tooling for the required investigation ledger.
 - Resumable user turns for material clarifications, risk approvals, reproduction, verification, and cleanup guidance.
+- A structured question tool. Human gates use explicit choices for known decision sets and free-form input for open details; without one the workflow reports incompatibility and stops.
 - IPv4 connectivity from each instrumented process to a collector ingest URL.
 - Permission to add and later remove temporary probes in the affected source.
 
@@ -180,9 +181,11 @@ Startup options:
 
 ## Collector and API
 
-The startup script creates a private session directory under the OS temporary directory and binds an OS-assigned port. It uses `127.0.0.1` by default. Explicit `--allow-remote` binds `0.0.0.0` and advertises discovered private IPv4 candidates; `--advertise-host` supplies a target-reachable hostname or address for container aliases, VMs, forwarding, or unusual networks. `0.0.0.0` is never an ingest URL.
+The startup script creates a private session directory under the OS temporary directory and binds an OS-assigned port. It uses `127.0.0.1` by default. Explicit `--allow-remote` binds `0.0.0.0` and advertises discovered private IPv4 candidates; `--advertise-host` supplies a target-reachable hostname or address for container aliases, VMs, forwarding, or unusual networks. `0.0.0.0` is never an ingest URL. Loopback collectors answer validated browser preflights only for `POST /v1/events`; CORS is never enabled for administrative endpoints or non-loopback clients.
 
 On POSIX systems, the mode-`0600` configuration stores two generated per-session tokens in a mode-`0700` directory. Windows relies on the current user's filesystem access controls. The ingest token authorizes only `POST /v1/events`; the admin token is accepted only from loopback for health, event reads, and shutdown. Neither token is printed. Local lifecycle scripts always use the loopback control URL.
+
+Configuration reaches a probe at the lowest workable tier: environment variables set by the launch command, literals inside the owned marker block when the target cannot read the environment, or runtime injection into an already-running process. The ingest token is an ephemeral loopback value rather than a credential, so inlining it inside a cleanup-owned block is acceptable; what matters is that it never reaches a commit or a shipped artifact. Runtime injection additionally requires approval and never carries probe logic.
 
 Authenticated endpoints:
 
@@ -197,6 +200,8 @@ Accepted events use schema version 1 and kinds `probe`, `branch`, `error`, `life
 
 ## Local Data, Retention, and Privacy
 
+Debugging happens on the developer's own machine, against their own code, at their request. The posture is calibrated to that: effort goes into not leaving instrumentation behind, not capturing data that outlives the session, and not extending trust past the local host. The per-session ingest token is an ephemeral loopback value that prevents stray local processes from posting into the collector; it is not a credential and grants no access beyond that collector.
+
 - Logs remain on the collector host. There is no telemetry or upload to an external service.
 - The server binds to IPv4 loopback by default. Remote ingestion requires explicit opt-in and is limited to trusted development networks because HTTP does not protect the ingest token in transit.
 - Remote clients can only submit events with the ingest token. Administrative endpoints and the admin token remain loopback-only.
@@ -208,7 +213,7 @@ Never probe passwords, authorization headers, cookies, tokens, private keys, ful
 
 ## Cleanup Guarantee
 
-Every inserted block has a session-specific marker, and every touched file, marker, and newly created-file flag is recorded in the current investigation's `debug_probes` rows. SQLite is the sole cleanup authority. Cleanup validates those rows and marker boundaries before editing, removes only recorded blocks, searches for the exact session prefix afterward, and inspects the final diff. If a marker is missing or a block has drifted, the agent stops and asks rather than deleting ambiguous code. The collector is stopped through its authenticated endpoint. When that endpoint is unreachable, `debug-server-status.mts` reports the recorded PID as unverified process information and requires manual identity inspection before the user decides what to do; it never emits a kill command or discovers a process from a port collision.
+Every inserted block has a session-specific marker, and every touched file, marker, and newly created-file flag is recorded in the current investigation's `debug_probes` rows. SQLite is the sole cleanup authority. Cleanup validates those rows and marker boundaries before editing, removes only recorded blocks, searches for the exact session prefix afterward, and inspects the final diff. If a marker is missing or a block has drifted, that probe remains active and its block is not edited; cleanup continues for independently owned artifacts and reports all unresolved paths and markers together. The collector is stopped through its authenticated endpoint, and its directory is deleted only after shutdown is acknowledged. When that endpoint is unreachable, `debug-server-status.mts` reports the recorded PID as unverified process information and requires manual identity inspection before the user decides what to do; it never emits a kill command or discovers a process from a port collision.
 
 The ledger uses the host's persistent session SQL database, never a file in the application repository. `skills/debug/schema.sql` is the canonical schema. At every resumed turn, the skill adopts the matching open investigation before creating a new one.
 
@@ -226,8 +231,8 @@ Automatic discovery produces candidates, not proof of target reachability. Befor
 
 - Remote mode is IPv4-only and provides no TLS, tunnel management, mDNS, or automatic port forwarding.
 - Remote HTTP ingestion is appropriate only on a trusted development network.
-- Browser CORS and HTTPS mixed-content policy can prevent direct event posts.
-- Browser bundles must never contain the ingest token; use backend instrumentation or a reviewed local relay.
+- HTTPS mixed-content rules and browser local-network permissions can still prevent direct event posts despite the loopback ingest preflight support.
+- Browser bundles must never carry the ingest token into a shipped, deployed, or committed artifact; a loopback token inlined in a temporary, cleanup-owned probe block is fine.
 - Short-lived processes may exit before fire-and-forget requests flush.
 - Probes can affect timing and may mask race conditions.
 - Collector arrival order is not distributed causal order.

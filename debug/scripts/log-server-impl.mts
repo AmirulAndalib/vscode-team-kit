@@ -217,9 +217,15 @@ export function validateAndNormalizeEvent(value: unknown, expectedSessionId: str
   return event;
 }
 
-function sendJson(response: ServerResponse, status: number, body: unknown): void {
+function sendJson(
+  response: ServerResponse,
+  status: number,
+  body: unknown,
+  headers: Readonly<Record<string, string>> = {},
+): void {
   const json = JSON.stringify(body);
   response.writeHead(status, {
+    ...headers,
     'content-type': 'application/json; charset=utf-8',
     'content-length': Buffer.byteLength(json),
     'cache-control': 'no-store',
@@ -246,6 +252,61 @@ export function isLoopbackAddress(address: string | undefined): boolean {
     return false;
   }
   return Number(ipv4.split('.')[0]) === 127;
+}
+
+function validatedOrigin(value: string | undefined): string | undefined {
+  if (!value || value === 'null' || value.length > 256) {
+    return undefined;
+  }
+  try {
+    const origin = new URL(value);
+    if (
+      (origin.protocol !== 'http:' && origin.protocol !== 'https:')
+      || origin.origin !== value
+      || origin.username !== ''
+      || origin.password !== ''
+    ) {
+      return undefined;
+    }
+    return value;
+  } catch {
+    return undefined;
+  }
+}
+
+export function resolveCorsHeaders(
+  method: string | undefined,
+  pathname: string,
+  remoteAddress: string | undefined,
+  originHeader: string | undefined,
+  requestedMethodHeader?: string,
+  privateNetworkRequested?: string,
+): Readonly<Record<string, string>> | undefined {
+  if (pathname !== '/v1/events' || !isLoopbackAddress(remoteAddress)) {
+    return undefined;
+  }
+  const origin = validatedOrigin(originHeader);
+  if (!origin) {
+    return undefined;
+  }
+  const headers: Record<string, string> = {
+    'access-control-allow-origin': origin,
+    vary: 'Origin',
+  };
+  if (method === 'POST') {
+    return headers;
+  }
+  if (method !== 'OPTIONS' || requestedMethodHeader?.toUpperCase() !== 'POST') {
+    return undefined;
+  }
+  headers['access-control-allow-methods'] = 'POST';
+  headers['access-control-allow-headers'] = 'authorization, content-type';
+  headers['access-control-max-age'] = '600';
+  headers['cache-control'] = 'no-store';
+  if (privateNetworkRequested?.toLowerCase() === 'true') {
+    headers['access-control-allow-private-network'] = 'true';
+  }
+  return headers;
 }
 
 export function authorizeCollectorRequest(
@@ -410,6 +471,23 @@ export async function createLogServer(options: CreateLogServerOptions = {}): Pro
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+      const corsHeaders = resolveCorsHeaders(
+        request.method,
+        url.pathname,
+        request.socket.remoteAddress,
+        request.headers.origin,
+        request.headers['access-control-request-method'],
+        request.headers['access-control-request-private-network'],
+      );
+      if (request.method === 'OPTIONS') {
+        if (!corsHeaders) {
+          sendJson(response, 400, { error: 'invalid CORS preflight' });
+          return;
+        }
+        response.writeHead(204, corsHeaders);
+        response.end();
+        return;
+      }
       if (!authorizeCollectorRequest(
         request.method,
         url.pathname,
@@ -417,11 +495,11 @@ export async function createLogServer(options: CreateLogServerOptions = {}): Pro
         request.headers.authorization,
         { adminToken, ingestToken },
       )) {
-        sendJson(response, 401, { error: 'unauthorized' });
+        sendJson(response, 401, { error: 'unauthorized' }, corsHeaders);
         return;
       }
       if (closing) {
-        sendJson(response, 503, { error: 'collector is shutting down' });
+        sendJson(response, 503, { error: 'collector is shutting down' }, corsHeaders);
         return;
       }
 
@@ -493,7 +571,7 @@ export async function createLogServer(options: CreateLogServerOptions = {}): Pro
         });
         writeQueue = storeOperation.then(() => undefined, () => undefined);
         const storedEvent = await storeOperation;
-        sendJson(response, 202, { accepted: true, sequence: storedEvent.sequence });
+        sendJson(response, 202, { accepted: true, sequence: storedEvent.sequence }, corsHeaders);
         return;
       }
       if (request.method === 'POST' && url.pathname === '/shutdown') {
@@ -512,7 +590,12 @@ export async function createLogServer(options: CreateLogServerOptions = {}): Pro
         sendJson(response, error.status, {
           ...(error.status === 507 ? { result: 'DEBUG_EVENT_CAPACITY_REACHED' } : {}),
           error: error.message,
-        });
+        }, resolveCorsHeaders(
+          request.method,
+          new URL(request.url ?? '/', 'http://127.0.0.1').pathname,
+          request.socket.remoteAddress,
+          request.headers.origin,
+        ));
         return;
       }
       sendJson(response, 500, { error: error instanceof Error ? error.message : String(error) });

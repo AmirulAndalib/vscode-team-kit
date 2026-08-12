@@ -20,6 +20,7 @@ import {
   parseCommandArguments,
   parseOptionArguments,
   readSessionConfig,
+  resolveCorsHeaders,
   startLogServer,
   validateAdvertiseHost,
   validateAndNormalizeEvent,
@@ -356,6 +357,83 @@ describe('authentication', () => {
     for (const response of await Promise.all(requests)) {
       strictEqual(response.status, 401);
     }
+  });
+});
+
+describe('browser CORS', () => {
+  it('answers loopback ingest preflights without allowing credentials', async () => {
+    const server = await start();
+    const response = await fetch(url(server, '/v1/events'), {
+      method: 'OPTIONS',
+      headers: {
+        origin: 'http://localhost:3000',
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'Authorization, Content-Type',
+        'access-control-request-private-network': 'true',
+      },
+    });
+
+    strictEqual(response.status, 204);
+    strictEqual(response.headers.get('access-control-allow-origin'), 'http://localhost:3000');
+    strictEqual(response.headers.get('access-control-allow-methods'), 'POST');
+    strictEqual(response.headers.get('access-control-allow-headers'), 'authorization, content-type');
+    strictEqual(response.headers.get('access-control-allow-private-network'), 'true');
+    strictEqual(response.headers.get('access-control-max-age'), '600');
+    strictEqual(response.headers.get('access-control-allow-credentials'), null);
+  });
+
+  it('returns CORS headers on authenticated browser event responses', async () => {
+    const server = await start();
+    const response = await fetch(url(server, '/v1/events'), {
+      method: 'POST',
+      headers: {
+        ...ingestHeaders(server),
+        origin: 'https://localhost:3000',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(event(server)),
+    });
+
+    strictEqual(response.status, 202);
+    strictEqual(response.headers.get('access-control-allow-origin'), 'https://localhost:3000');
+    strictEqual(response.headers.get('vary'), 'Origin');
+    strictEqual(response.headers.get('access-control-allow-credentials'), null);
+  });
+
+  it('rejects invalid preflights without emitting CORS headers', async () => {
+    const server = await start();
+    for (const headers of [
+      { 'access-control-request-method': 'POST' },
+      { origin: 'null', 'access-control-request-method': 'POST' },
+      { origin: 'http://localhost:3000', 'access-control-request-method': 'DELETE' },
+    ]) {
+      const response = await fetch(url(server, '/v1/events'), { method: 'OPTIONS', headers });
+      strictEqual(response.status, 400);
+      strictEqual(response.headers.get('access-control-allow-origin'), null);
+    }
+  });
+
+  it('keeps CORS off admin endpoints and non-loopback requests', async () => {
+    const server = await start();
+    const response = await fetch(url(server, '/health'), {
+      headers: { ...headers(server), origin: 'http://localhost:3000' },
+    });
+    strictEqual(response.status, 200);
+    strictEqual(response.headers.get('access-control-allow-origin'), null);
+    strictEqual(resolveCorsHeaders(
+      'OPTIONS',
+      '/v1/events',
+      '192.168.1.20',
+      'http://localhost:3000',
+      'POST',
+    ), undefined);
+    strictEqual(resolveCorsHeaders(
+      'OPTIONS',
+      '/shutdown',
+      '127.0.0.1',
+      'http://localhost:3000',
+      'POST',
+    ), undefined);
   });
 });
 
