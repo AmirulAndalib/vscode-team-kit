@@ -101,7 +101,7 @@ This requires no model credentials. The coverage gate is intentionally scoped to
 To run all normal tasks and trigger tests against the live Copilot SDK:
 
 ```bash
-export GITHUB_TOKEN="<Copilot-capable token>"
+export COPILOT_SDK_TOKEN="<Copilot SDK token>"
 scripts/run-waza-evals.sh
 ```
 

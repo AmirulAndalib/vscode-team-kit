@@ -68,7 +68,7 @@ formatted_report() {
 	if ! grep -q '^## .*Waza Eval Results$' "${report_file}"; then
 		if grep -q 'copilot is not authenticated' "${log_file}"; then
 			echo
-			echo "> Copilot authentication failed. Configure a valid repository \`COPILOT_TOKEN\` secret; Waza receives it as \`COPILOT_SDK_TOKEN\`."
+			echo "> Copilot authentication failed. Verify the repository \`COPILOT_SDK_TOKEN\` secret is a valid Copilot SDK credential."
 		else
 			local diagnostic
 			diagnostic="$(

@@ -69,10 +69,10 @@ jobs:
       - name: Check live-evaluation credentials
         id: credentials
         env:
-          COPILOT_TOKEN: ${{ secrets.COPILOT_TOKEN }}
+          COPILOT_SDK_TOKEN: ${{ secrets.COPILOT_SDK_TOKEN }}
         run: |
           mkdir -p .waza-results/live
-          if [[ -n "${COPILOT_TOKEN}" ]]; then
+          if [[ -n "${COPILOT_SDK_TOKEN}" ]]; then
             echo "available=true" >> "${GITHUB_OUTPUT}"
           else
             echo "available=false" >> "${GITHUB_OUTPUT}"
@@ -81,7 +81,7 @@ jobs:
               echo '# Waza evaluation'
               echo
               # shellcheck disable=SC2016
-              echo 'Live-model evaluation was skipped because `COPILOT_TOKEN` is unavailable.'
+              echo 'Live-model evaluation was skipped because `COPILOT_SDK_TOKEN` is unavailable.'
               echo 'Deterministic Waza coverage and spec validation still passed.'
             } > .waza-results/live/comment.md
           fi
@@ -91,8 +91,8 @@ jobs:
         if: steps.credentials.outputs.available == 'true'
         continue-on-error: true
         env:
-          COPILOT_SDK_TOKEN: ${{ secrets.COPILOT_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.COPILOT_TOKEN }}
+          COPILOT_SDK_TOKEN: ${{ secrets.COPILOT_SDK_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.COPILOT_SDK_TOKEN }}
           WAZA_VERBOSE: ${{ inputs.verbose || false }}
         run: scripts/run-waza-evals.sh
 
@@ -107,7 +107,7 @@ jobs:
             echo
             if [[ "${HAS_CREDENTIALS}" != "true" ]]; then
               # shellcheck disable=SC2016
-              echo 'Skipped: `COPILOT_TOKEN` was unavailable.'
+              echo 'Skipped: `COPILOT_SDK_TOKEN` was unavailable.'
             elif [[ "${LIVE_OUTCOME}" == "success" ]]; then
               echo 'All eight live suites passed.'
             else
