@@ -1,6 +1,6 @@
 ---
 name: council-review
-description: "Multi-model council review for diffs, pull requests, and risky changes. It is CRITICAL to use this skill after ANY non-trivial development phase — changes are usually not 100% correct. Development CANNOT be called done until the code has been reviewed. Use whenever the user asks for a review, PR feedback, a bug hunt in recent edits, or wants multiple models to inspect the same change independently. Also use when the user asks to 'discuss findings', 'cross-review', or 'debate' review results between models."
+description: 'Multi-model council review for diffs, pull requests, and risky changes — CRITICAL after non-trivial development. USE FOR: "review a diff or pull request", "bug hunt in recent edits", "multiple models inspect the same change independently", "cross-review or debate findings between models", "review after any non-trivial development phase". DO NOT USE FOR: "plan a new implementation", "write code without a review".'
 ---
 
 # Skill: Review Council

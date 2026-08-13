@@ -288,19 +288,20 @@ export interface CodeFragment {
 }
 
 export function extractCodeFragments(toolName: string, toolInput: Record<string, unknown>): CodeFragment[] {
+  if (toolName === 'create_file') {
+    const filePath = toolInput.filePath;
+    const content = toolInput.content;
+    if (typeof filePath === 'string' && typeof content === 'string' && content.length > 0) {
+      return [{ filePath, text: content }];
+    }
+    return [];
+  }
+
   if (isEditTool(toolName)) {
     return extractEditInputs(toolName, toolInput).map((e: EditInput) => ({
       filePath: e.filePath,
       text: e.newString,
     }));
-  }
-
-  if (toolName === 'create_file') {
-    const filePath = toolInput.filePath as string | undefined;
-    const content = toolInput.content as string | undefined;
-    if (filePath && content) {
-      return [{ filePath, text: content }];
-    }
   }
 
   return [];

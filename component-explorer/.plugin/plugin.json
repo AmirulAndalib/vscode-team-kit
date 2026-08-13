@@ -1,6 +1,6 @@
 {
   "name": "component-explorer",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Skills for setting up and using the VS Code Component Explorer — fixture-based visual testing with MCP-powered screenshot comparison.",
   "license": "MIT",
   "categories": ["testing"],

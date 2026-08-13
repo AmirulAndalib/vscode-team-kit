@@ -1,19 +1,22 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/microsoft/waza/v0.38.5/schemas/task.schema.json
 id: basic-setup-001
 name: Basic setup request
 description: |
-  Test that the skill responds to a basic setup request
-  with installation and configuration steps.
+  Verifies the setup path in a Vite based project: the response installs the
+  component explorer packages, configures the Vite plugin, and integrates the
+  explorer with the surrounding project config.
 tags:
   - basic
   - happy-path
 
 inputs:
-  prompt: "Set up the component explorer in my Vite project"
+  prompt: "Set up and integrate the component explorer in my Vite based project: install the packages and configure the Vite plugin."
   context:
     framework: vite
     language: typescript
 
 expected:
+  should_trigger: true
   output_contains:
     - "component-explorer"
     - "npm install"

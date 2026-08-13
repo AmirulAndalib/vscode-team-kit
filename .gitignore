@@ -148,4 +148,5 @@ vite.config.ts.timestamp-*
 
 # Waza
 .waza-cache/
+.waza-results/
 results/

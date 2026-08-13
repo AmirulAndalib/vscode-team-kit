@@ -1,6 +1,6 @@
 ---
 name: use-component-explorer
-description: Read this skill when the project uses the component explorer and you deal with UI (fixtures, screenshots, visual testing, read when adding/changing UI).
+description: 'Write and update component explorer fixtures for UI work — fixtures, screenshots, visual testing. USE FOR: "create a fixture for a component", "add fixture groups or variants", "screenshots or visual testing of UI", "adding or changing UI in a component explorer project". DO NOT USE FOR: "set up or install the component explorer", "write a unit test with a test runner".'
 ---
 
 # Skill: Use Component Explorer

@@ -77,6 +77,36 @@ Every plugin here runs in our daily workflow. A few patterns that emerged:
 - **monitor-pr to stay in flow.** Push the PR, start the monitor, move to the next task. The agent tells you when something needs attention.
 - **ban-ast for rules the team agrees on.** Instead of documenting "don't use X" in a wiki nobody reads, we encode it as a hook that blocks the edit and explains why.
 
+## Evaluations
+
+The repository uses [Waza](https://github.com/microsoft/waza) 0.38.5 to evaluate the eight skills declared under `evals` in [marketplace.json](marketplace.json): `manage-bans`, the four component-explorer skills, the two model-council skills, and `review-areas`.
+
+Install the pinned binary locally:
+
+```bash
+scripts/install-waza.sh
+export PATH="${HOME}/.local/bin:${PATH}"
+```
+
+The installer supports macOS and Linux on amd64 and arm64, verifies the release asset's SHA-256 digest, and rejects an unexpected version.
+
+Run the deterministic checks used as the pull-request merge gate:
+
+```bash
+scripts/validate-waza.sh
+```
+
+This requires no model credentials. The coverage gate is intentionally scoped to the four opted-in plugins and their eight declared skills; it does not enforce repository-wide eval coverage or pull additional plugins into scope. Within that scope, it verifies exactly those eight skills have complete eval coverage and that every suite covers its skill contract under deterministic `waza spec verify`.
+
+To run all normal tasks and trigger tests against the live Copilot SDK:
+
+```bash
+export GITHUB_TOKEN="<Copilot-capable token>"
+scripts/run-waza-evals.sh
+```
+
+Live results are written per skill under `.waza-results/live/`, including JSON outcomes, transcripts, and GitHub-comment reports. These model-backed evaluations are published by CI for diagnosis but do not block merges; deterministic coverage and spec validation do.
+
 ## Contributing
 
 We'd love contributions. Each plugin is self-contained in its own directory with a `.plugin/plugin.json`, skills, and optionally hooks or scripts — look at any existing plugin for the pattern.
