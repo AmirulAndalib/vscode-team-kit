@@ -91,6 +91,7 @@ jobs:
         if: steps.credentials.outputs.available == 'true'
         continue-on-error: true
         env:
+          COPILOT_SDK_TOKEN: ${{ secrets.COPILOT_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.COPILOT_TOKEN }}
           WAZA_VERBOSE: ${{ inputs.verbose || false }}
         run: scripts/run-waza-evals.sh

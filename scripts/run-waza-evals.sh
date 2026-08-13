@@ -18,8 +18,8 @@ if [[ "${actual_version}" != "${expected_version}" ]]; then
 	exit 1
 fi
 
-if [[ -z "${GITHUB_TOKEN:-}" ]]; then
-	echo "GITHUB_TOKEN must contain a Copilot-capable token for live Waza evaluations" >&2
+if [[ -z "${COPILOT_SDK_TOKEN:-}" && -z "${GITHUB_TOKEN:-}" ]]; then
+	echo "COPILOT_SDK_TOKEN or GITHUB_TOKEN must contain a Copilot-capable token for live Waza evaluations" >&2
 	exit 1
 fi
 
@@ -52,6 +52,7 @@ trigger_accuracy_summary() {
 
 formatted_report() {
 	local report_file="$1"
+	local log_file="$2"
 
 	awk '
 		/^## .*Waza Eval Results$/ { found = 1 }
@@ -59,10 +60,31 @@ formatted_report() {
 		found { print }
 		END {
 			if (!found) {
-				print "Waza did not emit a formatted report; see the workflow artifact for raw output."
+				print "> Waza did not emit a formatted report."
 			}
 		}
 	' "${report_file}"
+
+	if ! grep -q '^## .*Waza Eval Results$' "${report_file}"; then
+		if grep -q 'copilot is not authenticated' "${log_file}"; then
+			echo
+			echo "> Copilot authentication failed. Configure a valid repository \`COPILOT_TOKEN\` secret; Waza receives it as \`COPILOT_SDK_TOKEN\`."
+		else
+			local diagnostic
+			diagnostic="$(
+				grep -Ev '^(time=.* level=(WARN|INFO) |$)' "${log_file}" |
+					tail -n 1 |
+					tr '\n' ' ' |
+					cut -c1-500
+			)"
+			if [[ -n "${diagnostic}" ]]; then
+				echo
+				echo "> Failure detail: \`${diagnostic}\`"
+			fi
+		fi
+		echo
+		echo "> See the workflow artifact for raw output."
+	fi
 }
 
 {
@@ -112,7 +134,7 @@ for pair in "${WAZA_SKILL_EVAL_PAIRS[@]}"; do
 		echo
 		echo "## ${skill_name}"
 		echo
-		formatted_report "${report_file}"
+		formatted_report "${report_file}" "${log_file}"
 		echo
 		echo "**Trigger accuracy:** ${trigger_summary}"
 		if [[ "${status}" -eq 0 ]]; then
