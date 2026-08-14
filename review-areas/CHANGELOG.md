@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1 — 2026-08-12
+
+- Migrated the `review-areas` evaluation suite to Waza 0.38.5 schema 1.2 with deterministic spec coverage and enforced trigger-accuracy measurement
+
 ## 1.2.0 — 2026-04-17
 
 - Extracted `review-plan` to its own standalone plugin, simplifying this plugin to focus solely on area-based review

@@ -1,6 +1,6 @@
 ---
 name: setup-component-explorer
-description: Set up and integrate the Component Explorer into a vite based project.
+description: 'Set up and integrate the Component Explorer into a Vite based project. USE FOR: "set up component explorer", "add component explorer to a Vite app", "install component explorer packages", "configure the component explorer Vite plugin". DO NOT USE FOR: "write a fixture for a component", "set up a different test framework".'
 ---
 
 # Skill: Setup Component Explorer

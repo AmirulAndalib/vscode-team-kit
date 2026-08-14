@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/microsoft/waza/v0.38.5/schemas/eval.schema.json
+schemaVersion: "1.2"
 name: setup-component-explorer-eval
 description: |
   Evaluation suite for the setup-component-explorer skill.
@@ -12,6 +14,17 @@ config:
   parallel: false
   executor: copilot-sdk
   model: claude-sonnet-4.6
+  skill_directories:
+    - ".."
+    - "../.."
+  required_skills:
+    - setup-component-explorer
+
+metrics:
+  - name: trigger_accuracy
+    weight: 1.0
+    threshold: 0.9
+    description: Correctly trigger for Component Explorer setup in Vite projects.
 
 graders:
   - type: text

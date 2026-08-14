@@ -1,6 +1,6 @@
 ---
 name: council-plan
-description: "Multi-model council planning for implementation and architecture decisions. Use when the user asks to 'plan with council', 'multi-model plan', 'get different perspectives on approach', 'council plan', or wants multiple models to independently propose plans for the same task. Also use when the user asks to 'debate approaches', 'compare strategies', or 'cross-plan'."
+description: 'Multi-model council planning for implementation and architecture decisions. USE FOR: "plan with council", "multi-model plan", "different perspectives on an approach", "multiple models propose plans independently", "debate approaches or compare strategies", "cross-plan a synthesis". DO NOT USE FOR: "review a diff or pull request", "answer a quick factual question".'
 ---
 
 # Skill: Plan Council

@@ -1,6 +1,6 @@
 ---
 name: manage-bans
-description: Create and manage banned AST patterns that prevent specific code constructs. Use when the user wants to ban a code pattern, add a tree-sitter lint rule, or prevent specific syntax from appearing in edits.
+description: 'Create and manage banned AST patterns that prevent code constructs in edits. USE FOR: "ban a code pattern", "add a tree-sitter lint rule", "prevent specific syntax in edits", "validate a BANNED_AST.md rule". DO NOT USE FOR: "explain how existing code works", "answer general programming questions".'
 ---
 
 # Managing Banned AST Patterns

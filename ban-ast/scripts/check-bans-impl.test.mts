@@ -213,6 +213,11 @@ describe('extractCodeFragments', () => {
     const fragments = extractCodeFragments('create_file', { filePath: '/a.ts' });
     strictEqual(fragments.length, 0);
   });
+
+  it('returns empty for create_file with empty content', () => {
+    const fragments = extractCodeFragments('create_file', { filePath: '/a.ts', content: '' });
+    strictEqual(fragments.length, 0);
+  });
 });
 
 // ---------------------------------------------------------------------------

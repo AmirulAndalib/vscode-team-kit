@@ -1,16 +1,7 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/microsoft/waza/main/schemas/config.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/microsoft/waza/v0.38.5/schemas/config.schema.json
 
 defaults:
   engine: copilot-sdk
   model: claude-sonnet-4.6
   timeout: 300
-  parallel: true
   verbose: false
-
-tokens:
-  warningThreshold: 500
-  fallbackLimit: 1000
-
-cache:
-  enabled: true
-  dir: .waza-cache

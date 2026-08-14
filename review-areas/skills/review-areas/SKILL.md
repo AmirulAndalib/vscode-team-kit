@@ -1,6 +1,6 @@
 ---
 name: review-areas
-description: "In-depth code review that fans out parallel subagents across different review perspectives (correctness, tests, security, performance, product). It is CRITICAL to use this skill after ANY non-trivial development phase — changes are usually not 100% correct. Development CANNOT be called done until the code has been reviewed. Use when the user asks for a review, PR feedback, bug hunt, or code quality check."
+description: 'In-depth code review that fans out parallel subagents across review areas — CRITICAL after non-trivial development. USE FOR: "in-depth review of a pull request", "code quality check or bug hunt", "review correctness, tests, security, performance and product areas", "review after any non-trivial development phase". DO NOT USE FOR: "plan a new implementation", "explain how existing code works".'
 ---
 
 # Skill: Review Areas

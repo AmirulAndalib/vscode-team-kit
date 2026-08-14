@@ -1,6 +1,6 @@
 ---
 name: setup-component-explorer-full
-description: Full setup of the Component Explorer including CLI, MCP server, VS Code tasks and launch config.
+description: 'Full setup of the Component Explorer including CLI, MCP server, VS Code tasks and launch config. USE FOR: "complete component explorer setup with the CLI", "configure the component explorer MCP server", "add VS Code tasks for the component explorer", "add a launch config for the component explorer". DO NOT USE FOR: "minimal or plugin only component explorer setup", "write a fixture for a component".'
 ---
 
 # Skill: Setup Component Explorer

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1 (2026-08-12)
+
+- Migrated the `manage-bans` evaluation suite to Waza 0.38.5 schema 1.2 with deterministic spec coverage and enforced trigger-accuracy measurement
+
 ## 1.1.0 (2026-04-14)
 
 - Added eval infrastructure with trigger tests and task definitions for the `manage-bans` skill
