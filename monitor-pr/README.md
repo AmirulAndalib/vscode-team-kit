@@ -11,7 +11,7 @@ Monitor a pull request until CI finishes and Copilot's code review arrives — w
 ## How It Works
 
 1. **Identify the PR** — from conversation context, or a PR number the user provides.
-2. **Launch two async terminals** — one runs `wait-for-ci.mts`, the other `wait-for-copilot-review.mts`. Both exit with a single `RESULT: <STATE>` line. The CI waiter excludes review-policy checks so draft PRs finish monitoring when their builds finish.
+2. **Launch two async terminals** — one runs `wait-for-ci.mts`, the other `wait-for-copilot-review.mts`. Both exit with a single `RESULT: <STATE>` line. The CI waiter reports merge conflicts and excludes review-policy checks from actual CI completion; the review waiter first detects whether a review is expected, then watches threads and review IDs for a bounded 15-minute window.
 3. **React to the verdict** — on `CI_FAILED`, investigate whether the failure is real or a known-flake pattern; on `NEW_COPILOT_REVIEW` or `UNRESOLVED_COPILOT_REVIEW_COMMENTS`, fix the code and push resulting commits.
 4. **Restart after pushing** — new commits invalidate in-flight runs, so monitors are re-launched after each push.
 
@@ -27,6 +27,7 @@ monitor-pr/
         └── scripts/
             ├── wait-for-ci.mts
             ├── wait-for-ci.test.mts
+            ├── wait-for-copilot-review.test.mts
             └── wait-for-copilot-review.mts
 ```
 

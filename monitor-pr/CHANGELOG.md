@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.0 (2026-08-11)
+
+- Wait up to 15 minutes for automatic Copilot reviews instead of relying on `requested_reviewers`
+- Exit immediately when no Copilot review is expected, using applicable automatic-review rules, explicit requests, reviewed commit IDs, and the `microsoft/vscode*` repository convention
+- Check unresolved Copilot threads on every poll so review comments are reported as soon as they appear
+- Report merge conflicts immediately and distinguish green CI with outstanding non-build policy checks
+
 ## 1.4.0 (2026-08-09)
 
 - Stop waiting for the non-build `VS Code PR Check` and `Community PR Approvals` policy checks on draft PRs
