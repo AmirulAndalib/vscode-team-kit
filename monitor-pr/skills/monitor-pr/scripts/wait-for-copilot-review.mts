@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { setTimeout } from 'node:timers/promises';
+import { pathToFileURL } from 'node:url';
 
 /**
  * wait-for-copilot-review.mts
@@ -17,34 +18,89 @@ import { setTimeout } from 'node:timers/promises';
  *      If any are unresolved, exit immediately with
  *      `UNRESOLVED_COPILOT_REVIEW_COMMENTS` and print each comment.
  *
- *   2. Otherwise, check whether Copilot is currently listed in the PR's
- *      pending reviewers. GitHub adds Copilot there when a review is
- *      requested and removes it once Copilot submits its review, so this
- *      is the signal for "a review is actively in flight". Because GitHub
- *      sometimes takes a moment to register the reviewer after PR
- *      creation, we retry the check once after a short grace window.
- *        - Not pending after grace -> nothing to wait for, exit with
- *          `NO_PENDING_COPILOT_REVIEW`.
- *        - Pending -> enter the polling loop.
+ *   2. Determine whether a review is expected. Microsoft VS Code repositories,
+ *      an applicable automatic-review branch rule, or a visible explicit
+ *      request are positive signals. If none apply, exit immediately.
+ *      Automatic reviews do not reliably appear in `requested_reviewers`, so
+ *      an absent request never cancels another positive signal.
  *
- *   3. Polling loop (every `pollIntervalMs`):
- *        a. Re-fetch completed Copilot reviews. Any review whose ID was not
+ *   3. If a review is expected, poll every `pollIntervalMs`:
+ *        a. Re-fetch unresolved Copilot threads and exit as soon as comments
+ *           appear.
+ *        b. Re-fetch completed Copilot reviews. Any review whose ID was not
  *           present at startup is a new review -> exit with
  *           `NEW_COPILOT_REVIEW` and print each inline comment on it.
- *        b. Re-check the pending reviewers list. If Copilot has dropped out
- *           *and* no new review showed up, the request was cancelled or
- *           withdrawn -> exit with `NO_PENDING_COPILOT_REVIEW`.
- *
- * The script deliberately avoids using resolved/unresolved comment counts or
- * commit SHAs to decide whether to wait — amends, rebases, and squash-merges
- * make those signals unreliable. Presence in the pending reviewers list is
- * the single source of truth for "Copilot is working on a review right now".
+ *        c. If neither appears before the bounded window ends, exit with
+ *           `COPILOT_REVIEW_TIMEOUT`.
  *
  * Any unexpected `gh` or GraphQL failure prints the error and exits with
  * `COPILOT_REVIEW_ERROR` (exit code 2).
  */
 
 const pollIntervalMs = 30_000;
+export const copilotReviewWaitTimeoutMs = 15 * 60_000;
+
+export type CopilotReviewPollOutcome = 'comments' | 'review' | 'timeout' | 'pending';
+
+export interface CopilotReviewPollState {
+	unresolvedCommentCount: number;
+	newReviewCount: number;
+	deadlineReached: boolean;
+}
+
+export interface CopilotReviewRule {
+	reviewDraftPullRequests: boolean;
+	reviewOnPush: boolean;
+}
+
+export interface CopilotReviewExpectation {
+	expected: boolean;
+	reason: string;
+}
+
+export function evaluateCopilotReviewPoll(state: CopilotReviewPollState): CopilotReviewPollOutcome {
+	if (state.unresolvedCommentCount > 0) {
+		return 'comments';
+	}
+	if (state.newReviewCount > 0) {
+		return 'review';
+	}
+	return state.deadlineReached ? 'timeout' : 'pending';
+}
+
+export function evaluateCopilotReviewExpectation(
+	repo: string,
+	isDraft: boolean,
+	hasExplicitRequest: boolean,
+	rule: CopilotReviewRule | undefined,
+	existingReviewCount: number,
+	hasReviewForHead: boolean,
+): CopilotReviewExpectation {
+	const { owner, name } = parseRepo(repo);
+	if (hasExplicitRequest) {
+		return { expected: true, reason: 'Copilot is currently listed as a requested reviewer' };
+	}
+	const isMicrosoftVsCodeRepo = owner.toLowerCase() === 'microsoft' && name.toLowerCase().startsWith('vscode');
+	if (rule === undefined) {
+		if (isMicrosoftVsCodeRepo && existingReviewCount === 0) {
+			return { expected: true, reason: `${owner}/${name} is a Microsoft VS Code repository without an existing Copilot review` };
+		}
+		if (isMicrosoftVsCodeRepo) {
+			return { expected: false, reason: 'a Copilot review already exists and no re-review signal was found' };
+		}
+		return { expected: false, reason: 'no applicable automatic Copilot review rule or explicit request was found' };
+	}
+	if (isDraft && !rule.reviewDraftPullRequests) {
+		return { expected: false, reason: 'the applicable automatic review rule excludes draft pull requests' };
+	}
+	if (existingReviewCount > 0 && !rule.reviewOnPush) {
+		return { expected: false, reason: 'a Copilot review already exists and the automatic review rule does not review new pushes' };
+	}
+	if (hasReviewForHead) {
+		return { expected: false, reason: 'the current head commit already has a Copilot review and no explicit re-review was requested' };
+	}
+	return { expected: true, reason: 'an applicable automatic Copilot review rule was found' };
+}
 
 interface GhResult {
 	exitCode: number;
@@ -57,7 +113,9 @@ interface PrInfo {
 	title: string;
 	url: string;
 	headRefName: string;
+	headRefOid: string;
 	baseRefName: string;
+	isDraft: boolean;
 }
 
 interface Review {
@@ -65,6 +123,7 @@ interface Review {
 	user: { login: string };
 	state: string;
 	submitted_at: string;
+	commit_id: string;
 }
 
 interface ReviewComment {
@@ -196,7 +255,7 @@ async function getPrInfo(prNumber: string, repo: string): Promise<PrInfo> {
 	const data = await ghJson([
 		'pr', 'view', prNumber,
 		'--repo', repo,
-		'--json', 'number,title,url,headRefName,baseRefName',
+		'--json', 'number,title,url,headRefName,headRefOid,baseRefName,isDraft',
 	]);
 	if (!isRecord(data)) {
 		throw new Error('Unexpected response from gh pr view.');
@@ -206,7 +265,9 @@ async function getPrInfo(prNumber: string, repo: string): Promise<PrInfo> {
 		title: typeof data.title === 'string' ? data.title : '',
 		url: typeof data.url === 'string' ? data.url : '',
 		headRefName: typeof data.headRefName === 'string' ? data.headRefName : '',
+		headRefOid: typeof data.headRefOid === 'string' ? data.headRefOid : '',
 		baseRefName: typeof data.baseRefName === 'string' ? data.baseRefName : '',
+		isDraft: data.isDraft === true,
 	};
 }
 
@@ -224,36 +285,51 @@ async function getReviews(prNumber: string, repo: string): Promise<Review[]> {
 			user: { login: item.user.login },
 			state: typeof item.state === 'string' ? item.state : '',
 			submitted_at: typeof item.submitted_at === 'string' ? item.submitted_at : '',
+			commit_id: typeof item.commit_id === 'string' ? item.commit_id : '',
 		};
 	});
 }
 
-/**
- * Returns true if Copilot is currently listed as a pending reviewer on the PR.
- *
- * GitHub places a reviewer in `requested_reviewers` when a review is
- * requested and removes them once the review is submitted. For Copilot this
- * produces a window of a few minutes (between "Copilot review requested" and
- * "Copilot finishes and posts its review") during which this function
- * returns true.
- */
-async function isCopilotPendingReviewer(prNumber: string, repo: string): Promise<boolean> {
+async function hasExplicitCopilotReviewRequest(prNumber: string, repo: string): Promise<boolean> {
 	const data = await ghJson([
-		'api', `repos/${repo}/pulls/${prNumber}`,
+		'api', `repos/${repo}/pulls/${prNumber}/requested_reviewers`,
 	]);
-	if (!isRecord(data)) {
-		throw new Error('Unexpected response from gh api pulls/<n>.');
+	if (!isRecord(data) || !Array.isArray(data.users)) {
+		throw new Error('Unexpected response from the requested reviewers API.');
 	}
-	const requested = data.requested_reviewers;
-	if (!Array.isArray(requested)) {
-		return false;
+	return data.users.some(user =>
+		isRecord(user)
+		&& typeof user.login === 'string'
+		&& isCopilotLogin(user.login)
+	);
+}
+
+async function getCopilotReviewRule(repo: string, baseBranch: string): Promise<CopilotReviewRule | undefined> {
+	const data = await ghJson([
+		'api', `repos/${repo}/rules/branches/${encodeURIComponent(baseBranch)}`,
+	]);
+	if (!Array.isArray(data)) {
+		throw new Error('Unexpected response from the active branch rules API.');
 	}
-	for (const entry of requested) {
-		if (isRecord(entry) && typeof entry.login === 'string' && isCopilotLogin(entry.login)) {
-			return true;
+
+	for (const rule of data) {
+		if (!isRecord(rule) || rule.type !== 'copilot_code_review') {
+			continue;
 		}
+		const parameters = rule.parameters;
+		if (
+			!isRecord(parameters)
+			|| typeof parameters.review_draft_pull_requests !== 'boolean'
+			|| typeof parameters.review_on_push !== 'boolean'
+		) {
+			throw new Error('Unexpected copilot_code_review rule parameters.');
+		}
+		return {
+			reviewDraftPullRequests: parameters.review_draft_pull_requests,
+			reviewOnPush: parameters.review_on_push,
+		};
 	}
-	return false;
+	return undefined;
 }
 
 async function getReviewComments(prNumber: string, repo: string): Promise<ReviewComment[]> {
@@ -533,6 +609,14 @@ function printReviewComments(comments: ReviewComment[]): void {
 	}
 }
 
+function printReviewThreadComments(comments: ReviewThreadComment[]): void {
+	for (const comment of comments) {
+		console.log(`- ${comment.path}:${formatReviewThreadLineRange(comment)} by ${comment.user.login} @ ${comment.created_at}`);
+		console.log(indent(comment.body.trim(), '  '));
+		console.log('');
+	}
+}
+
 async function main(): Promise<void> {
 	const [prNumber, repo] = process.argv.slice(2);
 	if (!prNumber || !repo) {
@@ -581,20 +665,25 @@ async function main(): Promise<void> {
 		console.log('');
 		console.log('Unresolved Copilot comments:');
 		console.log('');
-		for (const comment of initialThreadState.unresolved) {
-			console.log(`- ${comment.path}:${formatReviewThreadLineRange(comment)} by ${comment.user.login} @ ${comment.created_at}`);
-			console.log(indent(comment.body.trim(), '  '));
-			console.log('');
-		}
+		printReviewThreadComments(initialThreadState.unresolved);
 		process.exit(0);
 	}
 
-	// Is Copilot currently processing a review request? This is the ONLY
-	// signal we use to decide whether to wait — resolved comments or prior
-	// completed reviews alone do not imply that a re-review is coming.
-	let copilotPending: boolean;
+	const hasReviewForHead = initialReviews.some(review => review.commit_id === prInfo.headRefOid);
+	let expectation: CopilotReviewExpectation;
 	try {
-		copilotPending = await isCopilotPendingReviewer(prNumber, repo);
+		const [hasExplicitRequest, rule] = await Promise.all([
+			hasExplicitCopilotReviewRequest(prNumber, repo),
+			getCopilotReviewRule(repo, prInfo.baseRefName),
+		]);
+		expectation = evaluateCopilotReviewExpectation(
+			repo,
+			prInfo.isDraft,
+			hasExplicitRequest,
+			rule,
+			initialReviews.length,
+			hasReviewForHead,
+		);
 	} catch (error) {
 		console.error(error instanceof Error ? error.message : String(error));
 		console.log('');
@@ -602,45 +691,33 @@ async function main(): Promise<void> {
 		process.exit(2);
 	}
 
-	// Grace window: immediately after `gh pr create`, GitHub may not yet
-	// have registered Copilot as a pending reviewer. Retry once after a
-	// short wait before concluding nothing is coming.
-	if (!copilotPending) {
-		console.log('Copilot is not yet in the pending reviewers list. Waiting one interval for the request to register...');
-		await setTimeout(pollIntervalMs);
-		try {
-			copilotPending = await isCopilotPendingReviewer(prNumber, repo);
-		} catch (error) {
-			console.error(error instanceof Error ? error.message : String(error));
-			console.log('');
-			console.log('RESULT: COPILOT_REVIEW_ERROR');
-			process.exit(2);
-		}
-	}
-
-	if (!copilotPending) {
-		// No pending Copilot review request. Nothing to wait for — whether or
-		// not Copilot has reviewed this PR before, the user would need to
-		// request a fresh review before this script has anything to do.
-		console.log('RESULT: NO_PENDING_COPILOT_REVIEW');
-		console.log(`EXISTING_REVIEW_COUNT: ${initialReviews.length}`);
-		console.log(`EXISTING_COMMENT_COUNT: 0`);
+	if (!expectation.expected) {
+		console.log('RESULT: NO_COPILOT_REVIEW_EXPECTED');
+		console.log(`REASON: ${expectation.reason}`);
 		console.log('');
-		if (initialReviews.length === 0) {
-			console.log('(Copilot has not reviewed this PR, and no review is currently pending.)');
-		} else {
-			console.log('(Copilot has already reviewed this PR, and no re-review is currently pending.)');
-		}
+		console.log('(The monitor is exiting without waiting. Personal automatic-review settings are not exposed by the GitHub API.)');
 		process.exit(0);
 	}
 
+	const deadline = Date.now() + copilotReviewWaitTimeoutMs;
 	console.log(`Waiting for Copilot review on PR #${prNumber} (${repo})...`);
-	console.log('Copilot is currently in the PR\'s pending reviewers list.');
+	console.log(`Review expected because ${expectation.reason}.`);
+	console.log(`Monitoring for up to ${copilotReviewWaitTimeoutMs / 60_000} minutes; an absent requested reviewer will not end the wait.`);
 
 	while (true) {
+		const remainingMs = deadline - Date.now();
+		if (remainingMs > 0) {
+			await setTimeout(Math.min(pollIntervalMs, remainingMs));
+		}
+
+		console.log(`--- Checking Copilot review at ${new Date().toString()} ---`);
+		let currentThreadState: CopilotReviewThreadState;
 		let currentReviews: Review[];
 		try {
-			currentReviews = (await getReviews(prNumber, repo)).filter(isCompletedCopilotReview);
+			[currentThreadState, currentReviews] = await Promise.all([
+				getCopilotReviewThreadState(prNumber, repo),
+				getReviews(prNumber, repo).then(reviews => reviews.filter(isCompletedCopilotReview)),
+			]);
 		} catch (error) {
 			console.error(error instanceof Error ? error.message : String(error));
 			console.log('');
@@ -649,7 +726,25 @@ async function main(): Promise<void> {
 		}
 
 		const newReviews = currentReviews.filter(r => !initialReviewIds.has(r.id));
-		if (newReviews.length > 0) {
+		const outcome = evaluateCopilotReviewPoll({
+			unresolvedCommentCount: currentThreadState.unresolved.length,
+			newReviewCount: newReviews.length,
+			deadlineReached: Date.now() >= deadline,
+		});
+
+		if (outcome === 'comments') {
+			console.log('');
+			console.log('RESULT: NEW_COPILOT_REVIEW');
+			console.log(`NEW_REVIEW_COUNT: ${newReviews.length}`);
+			console.log(`NEW_COMMENT_COUNT: ${currentThreadState.unresolved.length}`);
+			console.log('');
+			console.log('Comments:');
+			console.log('');
+			printReviewThreadComments(currentThreadState.unresolved);
+			process.exit(0);
+		}
+
+		if (outcome === 'review') {
 			let allComments: ReviewComment[] = [];
 			try {
 				allComments = await getReviewComments(prNumber, repo);
@@ -673,34 +768,20 @@ async function main(): Promise<void> {
 			process.exit(0);
 		}
 
-		// No new review yet. If Copilot has also left the pending reviewers
-		// list, the request was cancelled or withdrawn and nothing is coming.
-		// (Order matters: we fetched reviews *before* pending status, so a
-		// review that landed between the two fetches would still have been
-		// picked up above.)
-		let stillPending: boolean;
-		try {
-			stillPending = await isCopilotPendingReviewer(prNumber, repo);
-		} catch (error) {
-			console.error(error instanceof Error ? error.message : String(error));
+		if (outcome === 'timeout') {
 			console.log('');
-			console.log('RESULT: COPILOT_REVIEW_ERROR');
-			process.exit(2);
-		}
-
-		if (!stillPending) {
-			console.log('');
-			console.log('Copilot is no longer in the PR\'s pending reviewers list and no new review was submitted.');
-			console.log('RESULT: NO_PENDING_COPILOT_REVIEW');
+			console.log('RESULT: COPILOT_REVIEW_TIMEOUT');
 			console.log(`EXISTING_REVIEW_COUNT: ${initialReviews.length}`);
 			console.log(`EXISTING_COMMENT_COUNT: 0`);
 			console.log('');
-			console.log('(The Copilot review request appears to have been cancelled.)');
+			console.log(`(No new Copilot review or unresolved Copilot comments appeared within ${copilotReviewWaitTimeoutMs / 60_000} minutes.)`);
 			process.exit(0);
 		}
 
-		await setTimeout(pollIntervalMs);
+		console.log('Still waiting for a new Copilot review or unresolved Copilot comments...');
 	}
 }
 
-await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+	await main();
+}

@@ -1,6 +1,6 @@
 import { deepStrictEqual } from 'node:assert';
 import { describe, it } from 'node:test';
-import { evaluateChecks } from './wait-for-ci.mts';
+import { evaluateChecks, getOutstandingPolicyChecks, hasMergeConflict } from './wait-for-ci.mts';
 import type { CheckRun } from './wait-for-ci.mts';
 
 function check(name: string, bucket: string): CheckRun {
@@ -48,5 +48,39 @@ describe('evaluateChecks', () => {
 			check('VS Code PR Check', 'pending'),
 			check('Community PR Approvals', 'pending'),
 		]), { state: 'pending' });
+	});
+});
+
+describe('hasMergeConflict', () => {
+	it('detects conflicting mergeability', () => {
+		deepStrictEqual(hasMergeConflict({
+			mergeable: 'CONFLICTING',
+			mergeStateStatus: 'BLOCKED',
+		}), true);
+	});
+
+	it('detects a dirty merge state', () => {
+		deepStrictEqual(hasMergeConflict({
+			mergeable: 'UNKNOWN',
+			mergeStateStatus: 'DIRTY',
+		}), true);
+	});
+
+	it('allows non-conflicting merge states', () => {
+		deepStrictEqual(hasMergeConflict({
+			mergeable: 'MERGEABLE',
+			mergeStateStatus: 'CLEAN',
+		}), false);
+	});
+});
+
+describe('getOutstandingPolicyChecks', () => {
+	it('returns only non-passing policy checks', () => {
+		const pendingPolicyCheck = check('VS Code PR Check', 'pending');
+		deepStrictEqual(getOutstandingPolicyChecks([
+			check('Compile & Hygiene', 'pass'),
+			pendingPolicyCheck,
+			check('Community PR Approvals', 'pass'),
+		]), [pendingPolicyCheck]);
 	});
 });

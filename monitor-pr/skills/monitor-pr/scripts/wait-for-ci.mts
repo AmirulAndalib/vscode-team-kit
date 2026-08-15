@@ -20,6 +20,11 @@ export interface CheckRun {
 	link: string;
 }
 
+export interface PullRequestMergeState {
+	mergeable: string;
+	mergeStateStatus: string;
+}
+
 export type CiOutcome =
 	| { state: 'failed'; failedChecks: CheckRun[] }
 	| { state: 'passed' }
@@ -72,6 +77,18 @@ function parseChecks(stdout: string): CheckRun[] {
 	});
 }
 
+function parsePullRequestMergeState(stdout: string): PullRequestMergeState {
+	const parsed: unknown = JSON.parse(stdout);
+	if (!isRecord(parsed) || typeof parsed.mergeable !== 'string' || typeof parsed.mergeStateStatus !== 'string') {
+		throw new Error('Unexpected mergeability response from gh pr view.');
+	}
+
+	return {
+		mergeable: parsed.mergeable,
+		mergeStateStatus: parsed.mergeStateStatus,
+	};
+}
+
 function printChecks(checks: CheckRun[]): void {
 	if (checks.length === 0) {
 		console.log('No checks reported yet.');
@@ -82,6 +99,18 @@ function printChecks(checks: CheckRun[]): void {
 		const suffix = check.link ? `  ${check.link}` : '';
 		console.log(`${check.name}\t${check.bucket}${suffix}`);
 	}
+}
+
+export function hasMergeConflict(state: PullRequestMergeState): boolean {
+	return state.mergeable.toUpperCase() === 'CONFLICTING' || state.mergeStateStatus.toUpperCase() === 'DIRTY';
+}
+
+export function getOutstandingPolicyChecks(checks: readonly CheckRun[]): CheckRun[] {
+	return checks.filter(check =>
+		nonBlockingPolicyCheckNames.has(check.name)
+		&& check.bucket !== 'pass'
+		&& check.bucket !== 'skipping'
+	);
 }
 
 export function evaluateChecks(checks: readonly CheckRun[]): CiOutcome {
@@ -106,6 +135,34 @@ async function main(): Promise<void> {
 
 	while (true) {
 		console.log(`--- Checking CI at ${new Date().toString()} ---`);
+		let mergeState: PullRequestMergeState;
+		try {
+			const mergeStateResult = await runGh([
+				'pr', 'view', prNumber,
+				'--repo', repo,
+				'--json', 'mergeable,mergeStateStatus',
+			]);
+			if (mergeStateResult.exitCode !== 0) {
+				throw new Error(mergeStateResult.stderr.trim() || mergeStateResult.stdout.trim() || `gh pr view failed with exit code ${mergeStateResult.exitCode}`);
+			}
+			mergeState = parsePullRequestMergeState(mergeStateResult.stdout);
+		} catch (error) {
+			console.error(error instanceof Error ? error.message : String(error));
+			console.log('');
+			console.log('RESULT: CI_ERROR');
+			process.exit(2);
+		}
+
+		console.log(`Merge state: mergeable=${mergeState.mergeable}, mergeStateStatus=${mergeState.mergeStateStatus}`);
+		if (hasMergeConflict(mergeState)) {
+			console.log('');
+			console.log('RESULT: MERGE_CONFLICT');
+			console.log(`MERGEABLE: ${mergeState.mergeable}`);
+			console.log(`MERGE_STATE_STATUS: ${mergeState.mergeStateStatus}`);
+			console.log('The pull request has merge conflicts that must be resolved before CI can complete reliably.');
+			process.exit(1);
+		}
+
 		let result: GhResult;
 		try {
 			result = await runGh(['pr', 'checks', prNumber, '--repo', repo, '--json', 'name,bucket,link']);
@@ -152,9 +209,18 @@ async function main(): Promise<void> {
 		}
 
 		if (outcome.state === 'passed') {
+			const outstandingPolicyChecks = getOutstandingPolicyChecks(checks);
 			console.log('');
-			console.log('RESULT: CI_PASSED');
-			console.log('All CI checks have passed.');
+			if (outstandingPolicyChecks.length > 0) {
+				console.log('RESULT: CI_PASSED_POLICY_PENDING');
+				console.log('All actual CI checks have passed. Non-build policy checks are not passing yet:');
+				for (const check of outstandingPolicyChecks) {
+					console.log(`- ${check.name} (${check.bucket})`);
+				}
+			} else {
+				console.log('RESULT: CI_PASSED');
+				console.log('All CI and policy checks have passed.');
+			}
 			process.exit(0);
 		}
 

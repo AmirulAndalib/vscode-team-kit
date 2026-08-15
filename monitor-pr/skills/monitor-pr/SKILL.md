@@ -18,7 +18,6 @@ Monitor a pull request by running two scripts in async terminals: one that waits
 
 - **`gh` CLI** installed and authenticated.
 - **An active PR** — created earlier in the conversation, or supplied by the user as a number or URL.
-- **A Copilot review in flight, or already posted.** If Copilot has never been requested as a reviewer on this PR and has no posted comments, the review script will exit quickly with `NO_PENDING_COPILOT_REVIEW` — this skill only *waits for* Copilot reviews, it does not request them.
 
 ## Procedure
 
@@ -57,10 +56,13 @@ When you are notified that one of these terminals has exited, read its output wi
 | Script | Result | Exit | Action |
 |--------|--------|------|--------|
 | `wait-for-copilot-review.mts` | `UNRESOLVED_COPILOT_REVIEW_COMMENTS` | 0 | Unresolved Copilot comments existed before monitoring started. The output lists each comment (file, line, body). Follow step 4 below. |
-| `wait-for-copilot-review.mts` | `NO_PENDING_COPILOT_REVIEW` | 0 | No Copilot review is currently in flight and there are no unresolved Copilot comments. Report the status and move on — do not try to request a review yourself. |
 | `wait-for-copilot-review.mts` | `NEW_COPILOT_REVIEW` | 0 | A new Copilot review arrived after monitoring started. The output lists each new inline comment (file, line, body). Follow step 4 below. |
+| `wait-for-copilot-review.mts` | `NO_COPILOT_REVIEW_EXPECTED` | 0 | No applicable automatic-review rule or explicit request exists, so the script exited without waiting. Report the status and move on. |
+| `wait-for-copilot-review.mts` | `COPILOT_REVIEW_TIMEOUT` | 0 | No new Copilot review or unresolved Copilot comments appeared during the 15-minute monitoring window. Report the status and move on — do not try to request a review yourself. |
 | `wait-for-copilot-review.mts` | `COPILOT_REVIEW_ERROR` | 2 | Report the script or `gh` error output to the user. |
 | `wait-for-ci.mts` | `CI_PASSED` | 0 | CI is green. Report the status and keep waiting for the review terminal if it is still running. |
+| `wait-for-ci.mts` | `CI_PASSED_POLICY_PENDING` | 0 | Actual CI is green, but non-build review-policy checks are not passing yet. Report both facts and keep waiting for the review terminal if it is still running. |
+| `wait-for-ci.mts` | `MERGE_CONFLICT` | 1 | The PR is conflicting/dirty. Resolve the merge conflict, push the resolution, and restart both monitors. |
 | `wait-for-ci.mts` | `CI_FAILED` | 1 | Follow step 5 below. |
 | `wait-for-ci.mts` | `CI_ERROR` | 2 | Report the script or `gh` error output to the user. |
 
@@ -113,6 +115,8 @@ New commits re-trigger CI and may invalidate the existing Copilot review. After 
 ## Notes
 
 - Both scripts poll every 30 seconds to avoid hitting API rate limits, so there is up to ~30s of latency between an event occurring on GitHub and the script reporting it. Each poll also prints a progress line to stdout so the agent can confirm the monitor is still alive when reading the terminal output.
-- `wait-for-ci.mts` ignores the non-build `VS Code PR Check` and `Community PR Approvals` policy checks. Draft PRs can therefore report `CI_PASSED` once their actual build checks finish, without waiting for review approval.
+- `wait-for-ci.mts` checks mergeability before checks and reports `MERGE_CONFLICT` immediately for conflicting/dirty PRs.
+- `wait-for-ci.mts` ignores the non-build `VS Code PR Check` and `Community PR Approvals` policy checks when deciding whether actual CI is complete. Draft PRs therefore report `CI_PASSED_POLICY_PENDING` once their actual build checks finish.
 - `wait-for-ci.mts` exits **immediately** on the first poll that contains any failed or cancelled check; it does not wait for other checks to finish. All currently-failed checks at that moment are listed in the output.
-- `wait-for-copilot-review.mts` retries the pending-reviewer check once after a short grace window on startup to tolerate GitHub not yet having registered a freshly-requested Copilot reviewer.
+- `wait-for-copilot-review.mts` expects an initial review for `microsoft/vscode*` repositories. Elsewhere it waits when an applicable branch rule has `type: copilot_code_review` or Copilot is visibly requested. It honors the rule's draft and new-push settings and does not wait when the current head was already reviewed. Otherwise it reports `NO_COPILOT_REVIEW_EXPECTED` immediately. GitHub does not expose personal automatic-review settings, so those cannot be detected.
+- Once a review is expected, an empty `requested_reviewers` list does not end the wait because automatic reviews may never appear there. The script checks unresolved Copilot threads and new review IDs every 30 seconds for up to 15 minutes.
